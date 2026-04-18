@@ -18,6 +18,72 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Generate App Icons
+        run: |
+          pip install Pillow
+          python3 << 'PYEOF'
+          from PIL import Image, ImageDraw, ImageFont
+          import os
+
+          def create_icon(size):
+              img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+              draw = ImageDraw.Draw(img)
+              margin = int(size * 0.05)
+              radius = int(size * 0.22)
+              draw.rounded_rectangle([margin, margin, size - margin, size - margin], radius=radius, fill=(13, 13, 13, 255))
+              draw.rounded_rectangle([margin, margin, size - margin, size - margin], radius=radius, outline=(46, 46, 46, 255), width=max(1, size//72))
+              gold = (232, 197, 71, 255)
+              cx, cy = size // 2, size // 2
+              s = size / 192.0
+              crown_w = int(80 * s)
+              crown_h = int(50 * s)
+              crown_top = cy - int(20 * s)
+              crown_bottom = cy + int(30 * s)
+              crown_left = cx - crown_w // 2
+              crown_right = cx + crown_w // 2
+              body_points = [
+                  (crown_left + int(8*s), crown_bottom),
+                  (crown_left, crown_top + int(15*s)),
+                  (crown_left + int(12*s), crown_top + int(25*s)),
+                  (crown_left + int(20*s), crown_top + int(5*s)),
+                  (cx - int(8*s), crown_top + int(20*s)),
+                  (cx, crown_top - int(10*s)),
+                  (cx + int(8*s), crown_top + int(20*s)),
+                  (crown_right - int(20*s), crown_top + int(5*s)),
+                  (crown_right - int(12*s), crown_top + int(25*s)),
+                  (crown_right, crown_top + int(15*s)),
+                  (crown_right - int(8*s), crown_bottom),
+              ]
+              draw.polygon(body_points, fill=gold)
+              base_h = int(8 * s)
+              draw.rounded_rectangle([crown_left + int(5*s), crown_bottom, crown_right - int(5*s), crown_bottom + base_h], radius=int(3*s), fill=gold)
+              dot_r = int(4 * s)
+              for dx in [crown_left + int(20*s), cx, crown_right - int(20*s)]:
+                  draw.ellipse([dx - dot_r, crown_top - int(12*s) - dot_r, dx + dot_r, crown_top - int(12*s) + dot_r], fill=gold)
+              font_size = int(22 * s)
+              try:
+                  font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
+              except:
+                  font = ImageFont.load_default()
+              text = "#1"
+              bbox = draw.textbbox((0, 0), text, font=font)
+              tw = bbox[2] - bbox[0]
+              text_y = crown_bottom + base_h + int(6*s)
+              draw.text((cx - tw//2, text_y), text, fill=gold, font=font)
+              return img
+
+          sizes = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+          for density, px in sizes.items():
+              dirpath = f"app/src/main/res/mipmap-{density}"
+              os.makedirs(dirpath, exist_ok=True)
+              create_icon(px).save(f"{dirpath}/ic_launcher.png")
+              print(f"Created {density}: {px}x{px}")
+          PYEOF
+
+      - name: Update AndroidManifest
+        run: |
+          sed -i 's|android:label="Preference Ranker"|android:icon="@mipmap/ic_launcher"\n        android:label="Preference Ranker"|' app/src/main/AndroidManifest.xml
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
