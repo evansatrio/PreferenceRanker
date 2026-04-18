@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Preference Ranker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #0D0D0D;
+    --surface: #1A1A1A;
+    --surface2: #242424;
+    --border: #2E2E2E;
+    --text: #F0EDE6;
+    --text-dim: #8A8680;
+    --accent: #E8C547;
+    --accent-glow: rgba(232, 197, 71, 0.15);
+    --red: #E85454;
+    --green: #54E89A;
+    --blue: #5494E8;
+    --radius: 16px;
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: 'Outfit', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  .app {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 20px 40px;
+    position: relative;
+  }
+
+  .app::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .screen { display: none; width: 100%; max-width: 420px; position: relative; z-index: 1; }
+  .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+  .logo {
+    font-size: 13px; font-weight: 600; letter-spacing: 4px;
+    text-transform: uppercase; color: var(--accent);
+    margin-bottom: 40px; margin-top: 16px;
+  }
+
+  h1 { font-size: 28px; font-weight: 700; line-height: 1.2; margin-bottom: 10px; text-align: center; }
+  h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+
+  .subtitle {
+    font-size: 14px; color: var(--text-dim); text-align: center;
+    margin-bottom: 32px; line-height: 1.5; font-weight: 300;
+  }
+
+  /* ─── Inputs ─── */
+  .input-group { width: 100%; margin-bottom: 20px; }
+  .input-group label {
+    display: block; font-size: 11px; font-weight: 500;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 8px;
+  }
+
+  input[type="number"], input[type="text"] {
+    width: 100%; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 18px; font-family: 'Outfit', sans-serif;
+    font-size: 17px; font-weight: 400; color: var(--text); outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  input::placeholder { color: #4A4A4A; }
+
+  /* ─── Buttons ─── */
+  .btn {
+    width: 100%; padding: 16px 24px; border: none; border-radius: var(--radius);
+    font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s; letter-spacing: 0.5px;
+  }
+  .btn-primary { background: var(--accent); color: #0D0D0D; }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--text-dim); border: 1px solid var(--border); margin-top: 10px; }
+  .btn-ghost:active { background: var(--surface); }
+  .btn-sm { padding: 10px 16px; font-size: 13px; width: auto; border-radius: 10px; }
+  .btn-danger { background: var(--red); color: white; }
+  .btn-blue { background: var(--blue); color: white; }
+
+  /* ─── Names Input ─── */
+  .names-scroll {
+    width: 100%; max-height: 52vh; overflow-y: auto;
+    padding-right: 4px; margin-bottom: 20px;
+  }
+  .names-scroll::-webkit-scrollbar { width: 3px; }
+  .names-scroll::-webkit-scrollbar-track { background: transparent; }
+  .names-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .name-entry {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px; padding: 10px 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .name-entry .num {
+    font-size: 12px; font-weight: 600; color: var(--text-dim);
+    min-width: 24px; text-align: right;
+  }
+  .name-entry input[type="text"] {
+    flex: 1; padding: 10px 12px; font-size: 15px;
+    background: var(--surface2); border-color: transparent;
+    border-radius: 10px;
+  }
+  .name-entry input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+
+  /* Photo thumbnail */
+  .photo-wrap {
+    width: 44px; height: 44px; border-radius: 50%;
+    overflow: hidden; flex-shrink: 0; cursor: pointer;
+    background: var(--surface2); border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s; position: relative;
+  }
+  .photo-wrap:active { border-color: var(--accent); }
+  .photo-wrap img {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  .photo-wrap .photo-placeholder {
+    font-size: 18px; color: var(--text-dim);
+  }
+  .photo-wrap input[type="file"] {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    opacity: 0; cursor: pointer;
+  }
+
+  /* ─── Comparison Screen ─── */
+  .progress-section { width: 100%; margin-bottom: 28px; }
+  .progress-bar-bg {
+    width: 100%; height: 4px; background: var(--surface2);
+    border-radius: 2px; overflow: hidden; margin-bottom: 8px;
+  }
+  .progress-bar-fill {
+    height: 100%; background: var(--accent);
+    border-radius: 2px; transition: width 0.4s ease;
+  }
+  .progress-text {
+    font-size: 13px; color: var(--text-dim);
+    text-align: center; font-weight: 400;
+  }
+
+  .vs-label {
+    font-size: 13px; font-weight: 700; letter-spacing: 6px;
+    color: var(--text-dim); margin: 16px 0; text-align: center;
+  }
+
+  .choice-card {
+    width: 100%; padding: 20px; background: var(--surface);
+    border: 2px solid var(--border); border-radius: var(--radius);
+    font-family: 'Outfit', sans-serif; color: var(--text);
+    cursor: pointer; transition: all 0.15s; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 12px;
+  }
+  .choice-card:active {
+    transform: scale(0.97); border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .choice-card .card-photo {
+    width: 80px; height: 80px; border-radius: 50%;
+    object-fit: cover; border: 3px solid var(--border);
+  }
+  .choice-card .card-photo-placeholder {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: var(--surface2); border: 3px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; color: var(--text-dim);
+  }
+  .choice-card .card-name {
+    font-size: 20px; font-weight: 600;
+    word-break: break-word; line-height: 1.3;
+  }
+
+  .fade-enter { animation: fadeIn 0.25s ease; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─── Results ─── */
+  .results-list { width: 100%; margin-top: 8px; }
+
+  .result-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 8px; animation: slideUp 0.4s ease backwards;
+  }
+  .result-item.top1 {
+    border-color: var(--accent);
+    background: linear-gradient(135deg, rgba(232,197,71,0.12) 0%, var(--surface) 100%);
+  }
+  .result-item.top3 { border-color: rgba(232,197,71,0.3); }
+  .result-item.top5 { border-color: rgba(84,232,154,0.25); }
+
+  .result-rank {
+    font-size: 13px; font-weight: 700; min-width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; background: var(--surface2); color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .result-item.top1 .result-rank { background: var(--accent); color: #0D0D0D; }
+  .result-item.top3 .result-rank { background: rgba(232,197,71,0.2); color: var(--accent); }
+  .result-item.top5 .result-rank { background: rgba(84,232,154,0.15); color: var(--green); }
+
+  .result-photo {
+    width: 40px; height: 40px; border-radius: 50%;
+    object-fit: cover; flex-shrink: 0; border: 2px solid var(--border);
+  }
+  .result-photo-placeholder {
+    width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+    background: var(--surface2); border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; color: var(--text-dim);
+  }
+
+  .result-name { flex: 1; font-size: 15px; font-weight: 500; word-break: break-word; }
+  .result-wins { font-size: 12px; color: var(--text-dim); font-weight: 400; white-space: nowrap; }
+
+  .result-badge {
+    font-size: 10px; font-weight: 600; letter-spacing: 1px;
+    text-transform: uppercase; padding: 3px 8px; border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .badge-top1 { background: var(--accent); color: #0D0D0D; }
+  .badge-top3 { background: rgba(232,197,71,0.2); color: var(--accent); }
+  .badge-top5 { background: rgba(84,232,154,0.15); color: var(--green); }
+
+  .divider { width: 100%; height: 1px; background: var(--border); margin: 12px 0; }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .counter-display { font-size: 48px; font-weight: 800; color: var(--accent); margin: 6px 0 2px; }
+  .counter-hint { font-size: 12px; color: var(--text-dim); margin-bottom: 28px; }
+
+  /* ─── Bucket Section ─── */
+  .bucket-section {
+    width: 100%; margin-top: 16px;
+    border-top: 1px solid var(--border); padding-top: 20px;
+  }
+  .bucket-header {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 12px;
+  }
+  .bucket-header h2 { margin: 0; font-size: 15px; color: var(--text-dim); }
+
+  .bucket-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .bucket-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .bucket-item:active { border-color: var(--accent); background: var(--accent-glow); }
+
+  .bucket-item-name { flex: 1; font-size: 14px; font-weight: 500; }
+  .bucket-item-count { font-size: 12px; color: var(--text-dim); }
+  .bucket-item-delete {
+    width: 28px; height: 28px; border: none; background: transparent;
+    color: var(--red); font-size: 16px; cursor: pointer; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .bucket-item-delete:active { background: rgba(232,84,84,0.15); }
+
+  .save-bucket-row {
+    display: flex; gap: 8px; margin-bottom: 16px;
+  }
+  .save-bucket-row input {
+    flex: 1; padding: 10px 14px; font-size: 14px; border-radius: 10px;
+  }
+
+  /* ─── Action buttons row ─── */
+  .action-row {
+    display: flex; gap: 10px; width: 100%; margin-top: 12px;
+  }
+  .action-row .btn { flex: 1; }
+
+  /* ─── Toast ─── */
+  .toast {
+    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); color: var(--text); border: 1px solid var(--accent);
+    padding: 12px 24px; border-radius: 12px; font-size: 14px;
+    font-weight: 500; z-index: 999; opacity: 0;
+    transition: opacity 0.3s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+
+  /* ─── Canvas (hidden, for export) ─── */
+  #exportCanvas { display: none; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- SCREEN 1: Count + Buckets -->
+  <div id="screen-count" class="screen active">
+    <div class="logo">Preference Ranker</div>
+    <h1>How many candidates?</h1>
+    <p class="subtitle">Enter the number of people to compare (3–50), or load a saved bucket below.</p>
+    <div class="input-group">
+      <label>Number of Candidates</label>
+      <input type="number" id="countInput" min="3" max="50" placeholder="e.g. 10" inputmode="numeric">
+    </div>
+    <div id="matchInfo" style="text-align:center; margin-bottom:20px;">
+      <div class="counter-display" id="matchCount">—</div>
+      <div class="counter-hint">total comparisons</div>
+    </div>
+    <button class="btn btn-primary" id="btnToNames" disabled>Continue</button>
+
+    <!-- Saved Buckets -->
+    <div class="bucket-section" id="bucketSection">
+      <div class="bucket-header">
+        <h2>Saved Buckets</h2>
+      </div>
+      <div class="bucket-list" id="bucketList"></div>
+      <p id="noBuckets" style="font-size:13px; color:var(--text-dim); text-align:center; padding:12px 0;">No saved buckets yet.</p>
+    </div>
+  </div>
+
+  <!-- SCREEN 2: Enter Names + Photos -->
+  <div id="screen-names" class="screen">
+    <div class="logo">Preference Ranker</div>
+    <h1>Enter names & photos</h1>
+    <p class="subtitle">Fill in names and optionally tap the circle to add a photo.</p>
+    <div class="names-scroll" id="namesContainer"></div>
+
+    <!-- Save as bucket -->
+    <div class="save-bucket-row">
+      <input type="text" id="bucketNameInput" placeholder="Bucket name..." maxlength="30">
+      <button class="btn btn-sm btn-blue" id="btnSaveBucket">Save</button>
+    </div>
+
+    <button class="btn btn-primary" id="btnStart" disabled>Start Comparing</button>
+    <button class="btn btn-ghost" id="btnBackToCount">Back</button>
+  </div>
+
+  <!-- SCREEN 3: Comparison -->
+  <div id="screen-compare" class="screen">
+    <div class="logo">Preference Ranker</div>
+    <div class="progress-section">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progressFill"></div></div>
+      <div class="progress-text" id="progressText">0 / 0</div>
+    </div>
+    <h1 style="font-size:20px; margin-bottom:4px;">Who do you prefer?</h1>
+    <p class="subtitle" style="margin-bottom:20px;">Tap the one you like more.</p>
+    <div id="comparisonArea">
+      <button class="choice-card" id="choiceA" onclick="pick(0)"></button>
+      <div class="vs-label">VS</div>
+      <button class="choice-card" id="choiceB" onclick="pick(1)"></button>
+    </div>
+  </div>
+
+  <!-- SCREEN 4: Results -->
+  <div id="screen-results" class="screen">
+    <div class="logo">Preference Ranker</div>
+    <h1>Your Ranking</h1>
+    <p class="subtitle" id="resultSubtitle">Here's who came out on top.</p>
+    <div class="results-list" id="resultsList"></div>
+    <div class="action-row" style="margin-top:20px;">
+      <button class="btn btn-primary" id="btnSaveImage">Save as Image</button>
+    </div>
+    <button class="btn btn-ghost" id="btnRestart">Start Over</button>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+<canvas id="exportCanvas"></canvas>
+
+<script>
+  // ─── State ───
+  let candidates = [];     // [{name, photo (base64 or null)}]
+  let matchups = [];
+  let currentMatch = 0;
+  let wins = {};
+
+  // ─── DOM ───
+  const $ = id => document.getElementById(id);
+  const screens = { count: $('screen-count'), names: $('screen-names'), compare: $('screen-compare'), results: $('screen-results') };
+
+  function showScreen(name) {
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    screens[name].classList.add('active');
+    window.scrollTo(0, 0);
+  }
+
+  function showToast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // ─── Screen 1: Count ───
+  const countInput = $('countInput');
+  const matchCountEl = $('matchCount');
+  const btnToNames = $('btnToNames');
+
+  countInput.addEventListener('input', () => {
+    const n = parseInt(countInput.value);
+    if (n >= 3 && n <= 50) {
+      matchCountEl.textContent = (n * (n - 1)) / 2;
+      btnToNames.disabled = false;
+    } else {
+      matchCountEl.textContent = '—';
+      btnToNames.disabled = true;
+    }
+  });
+
+  btnToNames.addEventListener('click', () => {
+    buildNameInputs(parseInt(countInput.value));
+    showScreen('names');
+    setTimeout(() => {
+      const first = $('namesContainer').querySelector('input[type="text"]');
+      if (first) first.focus();
+    }, 300);
+  });
+
+  // ─── Screen 2: Names + Photos ───
+  function buildNameInputs(n, prefill) {
+    const container = $('namesContainer');
+    container.innerHTML = '';
+    for (let i = 0; i < n; i++) {
+      const name = prefill ? (prefill[i]?.name || '') : '';
+      const photo = prefill ? (prefill[i]?.photo || null) : null;
+
+      const row = document.createElement('div');
+      row.className = 'name-entry';
+      row.innerHTML = `
+        <span class="num">${i + 1}.</span>
+        <div class="photo-wrap" data-idx="${i}">
+          ${photo
+            ? `<img src="${photo}" alt="">`
+            : '<span class="photo-placeholder">+</span>'
+          }
+          <input type="file" accept="image/*" data-idx="${i}" class="photo-input">
+        </div>
+        <input type="text" class="name-input" placeholder="Candidate ${i + 1}" maxlength="40" value="${escapeHtml(name)}">
+      `;
+      container.appendChild(row);
+    }
+
+    container.querySelectorAll('.name-input').forEach(inp => inp.addEventListener('input', checkNamesReady));
+    container.querySelectorAll('.photo-input').forEach(inp => {
+      inp.addEventListener('change', handlePhotoSelect);
+    });
+    checkNamesReady();
+  }
+
+  function handlePhotoSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const idx = parseInt(e.target.dataset.idx);
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      // Resize to save memory
+      resizeImage(ev.target.result, 200, (resized) => {
+        const wrap = document.querySelectorAll('.photo-wrap')[idx];
+        wrap.innerHTML = `<img src="${resized}" alt=""><input type="file" accept="image/*" data-idx="${idx}" class="photo-input">`;
+        wrap.querySelector('.photo-input').addEventListener('change', handlePhotoSelect);
+      });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function resizeImage(dataUrl, maxDim, cb) {
+    const img = new Image();
+    img.onload = () => {
+      let w = img.width, h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) { h = Math.round(h * maxDim / w); w = maxDim; }
+        else { w = Math.round(w * maxDim / h); h = maxDim; }
+      }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      cb(c.toDataURL('image/jpeg', 0.8));
+    };
+    img.src = dataUrl;
+  }
+
+  function checkNamesReady() {
+    const inputs = $('namesContainer').querySelectorAll('.name-input');
+    $('btnStart').disabled = !Array.from(inputs).every(i => i.value.trim().length > 0);
+  }
+
+  $('btnBackToCount').addEventListener('click', () => showScreen('count'));
+
+  // ─── Save / Load Buckets ───
+  function getBuckets() {
+    try { return JSON.parse(localStorage.getItem('pr_buckets') || '[]'); }
+    catch { return []; }
+  }
+  function saveBuckets(b) { localStorage.setItem('pr_buckets', JSON.stringify(b)); }
+
+  function renderBuckets() {
+    const buckets = getBuckets();
+    const list = $('bucketList');
+    const noMsg = $('noBuckets');
+    list.innerHTML = '';
+    if (buckets.length === 0) { noMsg.style.display = ''; return; }
+    noMsg.style.display = 'none';
+
+    buckets.forEach((b, i) => {
+      const div = document.createElement('div');
+      div.className = 'bucket-item';
+      div.innerHTML = `
+        <span class="bucket-item-name">${escapeHtml(b.name)}</span>
+        <span class="bucket-item-count">${b.candidates.length} candidates</span>
+        <button class="bucket-item-delete" data-bi="${i}" onclick="event.stopPropagation(); deleteBucket(${i})">✕</button>
+      `;
+      div.addEventListener('click', () => loadBucket(i));
+      list.appendChild(div);
+    });
+  }
+
+  $('btnSaveBucket').addEventListener('click', () => {
+    const bName = $('bucketNameInput').value.trim();
+    if (!bName) { showToast('Enter a bucket name'); return; }
+
+    const inputs = $('namesContainer').querySelectorAll('.name-input');
+    const wraps = $('namesContainer').querySelectorAll('.photo-wrap');
+    const cands = [];
+    inputs.forEach((inp, i) => {
+      const img = wraps[i].querySelector('img');
+      cands.push({
+        name: inp.value.trim() || `Candidate ${i + 1}`,
+        photo: img ? img.src : null
+      });
+    });
+
+    const buckets = getBuckets();
+    buckets.push({ name: bName, candidates: cands });
+    saveBuckets(buckets);
+    $('bucketNameInput').value = '';
+    showToast(`Saved "${bName}"`);
+    renderBuckets();
+  });
+
+  function loadBucket(idx) {
+    const b = getBuckets()[idx];
+    if (!b) return;
+    countInput.value = b.candidates.length;
+    matchCountEl.textContent = (b.candidates.length * (b.candidates.length - 1)) / 2;
+    btnToNames.disabled = false;
+    buildNameInputs(b.candidates.length, b.candidates);
+    $('bucketNameInput').value = b.name;
+    showScreen('names');
+  }
+
+  function deleteBucket(idx) {
+    const buckets = getBuckets();
+    const name = buckets[idx]?.name;
+    buckets.splice(idx, 1);
+    saveBuckets(buckets);
+    renderBuckets();
+    showToast(`Deleted "${name}"`);
+  }
+
+  renderBuckets();
+
+  // ─── Start Comparison ───
+  $('btnStart').addEventListener('click', () => {
+    const inputs = $('namesContainer').querySelectorAll('.name-input');
+    const wraps = $('namesContainer').querySelectorAll('.photo-wrap');
+    candidates = [];
+    inputs.forEach((inp, i) => {
+      const img = wraps[i].querySelector('img');
+      candidates.push({
+        name: inp.value.trim(),
+        photo: img ? img.src : null
+      });
+    });
+
+    wins = {};
+    candidates.forEach((_, idx) => { wins[idx] = 0; });
+
+    matchups = [];
+    for (let i = 0; i < candidates.length; i++) {
+      for (let j = i + 1; j < candidates.length; j++) {
+        matchups.push([i, j]);
+      }
+    }
+    shuffleArray(matchups);
+    currentMatch = 0;
+    showMatchup();
+    showScreen('compare');
+  });
+
+  function shuffleArray(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  }
+
+  // ─── Comparison ───
+  const choiceA = $('choiceA'), choiceB = $('choiceB');
+  const comparisonArea = $('comparisonArea');
+
+  function showMatchup() {
+    if (currentMatch >= matchups.length) { showResults(); return; }
+    const [a, b] = matchups[currentMatch];
+    const total = matchups.length;
+    $('progressFill').style.width = ((currentMatch / total) * 100) + '%';
+    $('progressText').textContent = `${currentMatch + 1} of ${total}`;
+
+    let idxA = a, idxB = b;
+    if (Math.random() > 0.5) { idxA = b; idxB = a; }
+
+    renderCard(choiceA, idxA);
+    renderCard(choiceB, idxB);
+
+    comparisonArea.classList.remove('fade-enter');
+    void comparisonArea.offsetWidth;
+    comparisonArea.classList.add('fade-enter');
+  }
+
+  function renderCard(card, idx) {
+    const c = candidates[idx];
+    const photoHTML = c.photo
+      ? `<img class="card-photo" src="${c.photo}" alt="">`
+      : `<div class="card-photo-placeholder">?</div>`;
+    card.innerHTML = `${photoHTML}<div class="card-name">${escapeHtml(c.name)}</div>`;
+    card.dataset.idx = idx;
+  }
+
+  function pick(btnIndex) {
+    const winnerIdx = parseInt(btnIndex === 0 ? choiceA.dataset.idx : choiceB.dataset.idx);
+    wins[winnerIdx]++;
+    currentMatch++;
+    showMatchup();
+  }
+
+  // ─── Results ───
+  let rankedResults = [];
+
+  function showResults() {
+    $('progressFill').style.width = '100%';
+
+    rankedResults = candidates.map((c, idx) => ({
+      name: c.name, photo: c.photo,
+      wins: wins[idx], total: candidates.length - 1
+    }));
+    rankedResults.sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : a.name.localeCompare(b.name));
+
+    const list = $('resultsList');
+    list.innerHTML = '';
+    rankedResults.forEach((item, i) => {
+      const rank = i + 1;
+      let tier = '', badge = '';
+      if (rank === 1) { tier = 'top1'; badge = '<span class="result-badge badge-top1">#1 Pick</span>'; }
+      else if (rank <= 3) { tier = 'top3'; badge = '<span class="result-badge badge-top3">Top 3</span>'; }
+      else if (rank <= 5) { tier = 'top5'; badge = '<span class="result-badge badge-top5">Top 5</span>'; }
+
+      const photoHTML = item.photo
+        ? `<img class="result-photo" src="${item.photo}" alt="">`
+        : `<div class="result-photo-placeholder">?</div>`;
+
+      const div = document.createElement('div');
+      div.className = `result-item ${tier}`;
+      div.style.animationDelay = `${i * 0.05}s`;
+      div.innerHTML = `
+        <div class="result-rank">${rank}</div>
+        ${photoHTML}
+        <div class="result-name">${escapeHtml(item.name)}</div>
+        <div class="result-wins">${item.wins}/${item.total}</div>
+        ${badge}
+      `;
+      list.appendChild(div);
+
+      if (rank === 5 && rankedResults.length > 5) {
+        const hr = document.createElement('div');
+        hr.className = 'divider';
+        list.appendChild(hr);
+      }
+    });
+
+    $('resultSubtitle').textContent = `After ${matchups.length} comparisons — your final ranking.`;
+    showScreen('results');
+  }
+
+  // ─── Save as Image ───
+  $('btnSaveImage').addEventListener('click', renderResultImage);
+
+  function renderResultImage() {
+    const canvas = $('exportCanvas');
+    const ctx = canvas.getContext('2d');
+    const W = 800;
+    const rowH = 64;
+    const headerH = 140;
+    const count = rankedResults.length;
+    const dividerExtra = count > 5 ? 20 : 0;
+    const H = headerH + count * rowH + dividerExtra + 60;
+
+    canvas.width = W;
+    canvas.height = H;
+
+    // Background
+    ctx.fillStyle = '#0D0D0D';
+    ctx.fillRect(0, 0, W, H);
+
+    // Title
+    ctx.fillStyle = '#E8C547';
+    ctx.font = '600 13px Outfit, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PREFERENCE RANKER', W / 2, 40);
+
+    ctx.fillStyle = '#F0EDE6';
+    ctx.font = '700 28px Outfit, sans-serif';
+    ctx.fillText('Your Ranking', W / 2, 80);
+
+    ctx.fillStyle = '#8A8680';
+    ctx.font = '300 14px Outfit, sans-serif';
+    ctx.fillText(`After ${matchups.length} comparisons`, W / 2, 108);
+
+    // Load images first, then draw rows
+    const photoPromises = rankedResults.map(r => {
+      if (!r.photo) return Promise.resolve(null);
+      return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = r.photo;
+      });
+    });
+
+    Promise.all(photoPromises).then(images => {
+      let y = headerH;
+
+      rankedResults.forEach((item, i) => {
+        const rank = i + 1;
+        const rowY = y;
+
+        // Row background
+        if (rank === 1) {
+          ctx.fillStyle = 'rgba(232,197,71,0.08)';
+          ctx.fillRect(40, rowY, W - 80, rowH - 4);
+        }
+
+        // Rank badge
+        const badgeX = 60;
+        const badgeY = rowY + rowH / 2;
+        ctx.fillStyle = rank === 1 ? '#E8C547' : rank <= 3 ? 'rgba(232,197,71,0.2)' : rank <= 5 ? 'rgba(84,232,154,0.15)' : '#242424';
+        roundRect(ctx, badgeX - 15, badgeY - 14, 30, 28, 6);
+        ctx.fill();
+
+        ctx.fillStyle = rank === 1 ? '#0D0D0D' : rank <= 3 ? '#E8C547' : rank <= 5 ? '#54E89A' : '#8A8680';
+        ctx.font = '700 13px Outfit, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(rank.toString(), badgeX, badgeY + 5);
+
+        // Photo circle
+        const photoX = 110;
+        if (images[i]) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(photoX, badgeY, 18, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(images[i], photoX - 18, badgeY - 18, 36, 36);
+          ctx.restore();
+          ctx.strokeStyle = '#2E2E2E';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(photoX, badgeY, 18, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = '#242424';
+          ctx.beginPath();
+          ctx.arc(photoX, badgeY, 18, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#8A8680';
+          ctx.font = '400 14px Outfit, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('?', photoX, badgeY + 5);
+        }
+
+        // Name
+        ctx.fillStyle = '#F0EDE6';
+        ctx.font = '500 16px Outfit, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(item.name, 148, badgeY + 5);
+
+        // Wins
+        ctx.fillStyle = '#8A8680';
+        ctx.font = '400 13px Outfit, sans-serif';
+        ctx.textAlign = 'right';
+        const winsText = `${item.wins}/${item.total} wins`;
+        ctx.fillText(winsText, W - 60, badgeY + 5);
+
+        y += rowH;
+
+        // Divider after #5
+        if (rank === 5 && rankedResults.length > 5) {
+          ctx.strokeStyle = '#2E2E2E';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(60, y + 6);
+          ctx.lineTo(W - 60, y + 6);
+          ctx.stroke();
+          y += dividerExtra;
+        }
+      });
+
+      // Watermark
+      ctx.fillStyle = '#2E2E2E';
+      ctx.font = '400 11px Outfit, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('Generated by Preference Ranker', W / 2, H - 20);
+
+      // Export
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+      // Try Android bridge first, fallback to download link
+      if (window.Android && typeof window.Android.saveImage === 'function') {
+        window.Android.saveImage(dataUrl);
+        showToast('Saving to gallery...');
+      } else {
+        // Browser fallback
+        const a = document.createElement('a');
+        a.href = dataUrl;
+        a.download = 'PreferenceRanker_Result.jpg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        showToast('Image downloaded');
+      }
+    });
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+
+  // ─── Restart ───
+  $('btnRestart').addEventListener('click', () => {
+    countInput.value = '';
+    matchCountEl.textContent = '—';
+    btnToNames.disabled = true;
+    candidates = [];
+    matchups = [];
+    wins = {};
+    currentMatch = 0;
+    rankedResults = [];
+    renderBuckets();
+    showScreen('count');
+  });
+</script>
+</body>
+</html>
